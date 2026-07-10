@@ -1,0 +1,14 @@
+# Firebase credentials - NEVER commit these
+serviceAccountKey.json
+
+# Environment files with secrets
+.env
+.env.local
+.env*.local
+.env.production
+
+# Uploaded temp files
+uploads/
+
+# Node
+node_modules/
