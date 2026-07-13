@@ -21,11 +21,10 @@ const jsonModel = genAI.getGenerativeModel({
   generationConfig: {
     responseMimeType: 'application/json',
     temperature: 0.1,
-    maxOutputTokens: 16384,   // ✅ FIXED: Was 8192, now 16384 for all subjects
+    maxOutputTokens: 16384,
     topK: 40,
     topP: 0.95,
-  },
-  thinkingConfig: { thinkingBudget: 0 }
+  }
 });
 
 // MCQ model
@@ -37,8 +36,7 @@ const mcqModel = genAI.getGenerativeModel({
     maxOutputTokens: 6000,
     topK: 40,
     topP: 0.95,
-  },
-  thinkingConfig: { thinkingBudget: 0 }
+  }
 });
 
 // ─── IN-MEMORY LRU CACHE ───────────────────────────────────────────────────
@@ -425,12 +423,11 @@ router.post('/proxy', async (req, res) => {
         ? {
             responseMimeType: 'application/json',
             temperature: 0.1,
-            maxOutputTokens: 12000,  // ✅ FIXED: Was 6000, now 12000
+            maxOutputTokens: 12000,
             topK: 40,
             topP: 0.95
           }
-        : { temperature: 0.7, maxOutputTokens: 4096 },
-      ...(isJsonMode && { thinkingConfig: { thinkingBudget: 0 } })
+        : { temperature: 0.7, maxOutputTokens: 4096 }
     });
 
     const result   = await dynamicModel.generateContent(prompt);
