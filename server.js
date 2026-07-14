@@ -98,14 +98,17 @@ app.use('/api/ai', aiLimiter);
 
 // ─── HEALTH CHECK ──────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
+  const googleKey = process.env.GOOGLE_AI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const activeKey = googleKey || geminiKey;
   res.status(200).json({
     status: 'OK',
     message: 'ExamHero API is running.',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
-    geminiKey: process.env.GOOGLE_AI_API_KEY
-      ? `SET (${process.env.GOOGLE_AI_API_KEY.substring(0, 6)}...)`
-      : 'MISSING ⚠️',
+    geminiKey: activeKey
+      ? `SET via ${googleKey ? 'GOOGLE_AI_API_KEY' : 'GEMINI_API_KEY'} (${activeKey.substring(0, 8)}...)`
+      : 'MISSING ⚠️ — Set GOOGLE_AI_API_KEY in Render Environment',
   });
 });
 
