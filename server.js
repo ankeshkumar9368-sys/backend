@@ -61,8 +61,8 @@ const corsOptions = {
 // Apply CORS before any other middleware so preflight OPTIONS gets headers immediately
 app.use(cors(corsOptions));
 
-// Explicitly handle preflight OPTIONS for all routes (belt-and-suspenders)
-app.options('*', cors(corsOptions));
+// Explicitly handle preflight OPTIONS for all routes (belt-and-suspenders for Express 5+)
+app.options('/{*path}', cors(corsOptions));
 
 // ─── BODY PARSING ──────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));
