@@ -5,14 +5,16 @@ const { LRUCache } = require('lru-cache');
 const crypto = require('crypto');
 const verifyFirebaseToken = require('../middleware/verifyFirebaseToken');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '');
 
 // ─── MODEL INSTANCES (pre-warmed at startup) ───────────────────────────────
 
 // Standard text model
 const model = genAI.getGenerativeModel({
   model: 'gemini-2.5-flash',
-  generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+  generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
+  // Disable thinking to avoid empty output errors
+  thinkingConfig: { thinkingBudget: 0 }
 });
 
 // Notes JSON model — high token limit for rich bilingual notes
@@ -24,7 +26,9 @@ const jsonModel = genAI.getGenerativeModel({
     maxOutputTokens: 16384,
     topK: 40,
     topP: 0.95,
-  }
+  },
+  // Disable thinking — thinking tokens are not returned as text, causing empty output
+  thinkingConfig: { thinkingBudget: 0 }
 });
 
 // MCQ model
@@ -36,7 +40,9 @@ const mcqModel = genAI.getGenerativeModel({
     maxOutputTokens: 6000,
     topK: 40,
     topP: 0.95,
-  }
+  },
+  // Disable thinking — thinking tokens are not returned as text, causing empty output
+  thinkingConfig: { thinkingBudget: 0 }
 });
 
 // ─── IN-MEMORY LRU CACHE ───────────────────────────────────────────────────
@@ -54,6 +60,17 @@ function getCacheKey(...parts) {
 function sanitizeInput(str, maxLen = 300) {
   if (typeof str !== 'string') return '';
   return str.replace(/[`"\\]/g, '').substring(0, maxLen).trim();
+}
+
+// Check Gemini finish reason and throw descriptive error if blocked/empty
+function checkFinishReason(response, label = 'AI') {
+  const candidate = response.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+    const safetyRatings = candidate?.safetyRatings?.map(r => `${r.category}: ${r.probability}`).join(', ') || 'none';
+    console.error(`[${label}] Non-STOP finish reason: ${finishReason} | Safety: ${safetyRatings}`);
+    throw new Error(`${label} was blocked or returned no output. Reason: ${finishReason}. Try rephrasing your topic.`);
+  }
 }
 
 function extractJSON(text) {
@@ -254,10 +271,11 @@ JSON Schema (fill ALL fields):
 
     let responseText = '';
     const result = await jsonModel.generateContent(prompt);
+    checkFinishReason(result.response, 'Notes');
     responseText = result.response.text();
 
     if (!responseText || responseText.trim() === '') {
-      throw new Error('AI returned empty response');
+      throw new Error('AI returned empty response. The topic may have triggered a safety filter — please try a different wording.');
     }
 
     const notes = extractJSON(responseText);
@@ -342,6 +360,7 @@ Output strict JSON only:
 }`;
 
     const result = await mcqModel.generateContent(prompt);
+    checkFinishReason(result.response, 'MCQ');
     const data   = extractJSON(result.response.text());
     aiCache.set(cacheKey, data);
     console.log(`✅ Generated ${count} MCQs: [${topic}]`);
@@ -373,6 +392,7 @@ Output strict JSON:
 }`;
 
     const result   = await jsonModel.generateContent(prompt);
+    checkFinishReason(result.response, 'WeakArea');
     const analysis = extractJSON(result.response.text());
     res.status(200).json(analysis);
 
@@ -427,15 +447,18 @@ router.post('/proxy', async (req, res) => {
             topK: 40,
             topP: 0.95
           }
-        : { temperature: 0.7, maxOutputTokens: 4096 }
+        : { temperature: 0.7, maxOutputTokens: 4096 },
+      // Disable thinking — thinking tokens are not returned as text
+      thinkingConfig: { thinkingBudget: 0 }
     });
 
     const result   = await dynamicModel.generateContent(prompt);
     const response = result.response;
+    checkFinishReason(response, 'Proxy');
     const text     = response.text();
 
     if (!text || text.trim() === '') {
-      return res.status(500).json({ error: 'AI returned empty response.' });
+      return res.status(500).json({ error: 'AI returned empty response. The prompt may have been blocked by a safety filter.' });
     }
 
     if (isJsonMode) {
